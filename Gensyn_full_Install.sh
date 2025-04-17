@@ -31,7 +31,7 @@ else
 fi
 
 # Install Node.js 20.x if missing or outdated
-if ! command -v node >/dev/null 2>&1 || [[ "$(node -v)" < "v20" ]]; then
+if ! command -v node >/dev/null 2>&1 || [[ "$(node -v | sed 's/v//')" < "20" ]]; then
   echo "⬇️ Installing Node.js v20..."
   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
   sudo apt install -y nodejs
@@ -107,7 +107,25 @@ cd ../
 echo "🐍 Creating Python virtual environment..."
 python3 -m venv .venv
 
-# Start run_rl_swarm.sh in tmux
+# Set up tmux session
 SESSION_NAME="rl-swarm-session"
+LOG_FILE="$HOME/rl-swarm/rl-swarm.log"
+MAX_LOG_SIZE=$((10 * 1024 * 1024))  # 10 MB
+
+# Rotate log if it exceeds 10MB
+if [ -f "$LOG_FILE" ]; then
+  LOG_SIZE=$(stat -c%s "$LOG_FILE")
+  if [ "$LOG_SIZE" -ge "$MAX_LOG_SIZE" ]; then
+    echo "♻️ Log file exceeds 10MB, rotating..."
+    > "$LOG_FILE"  # Truncate file
+  fi
+fi
+
+# Start tmux session and log
 echo "🖥 Starting run_rl_swarm.sh inside tmux session: $SESSION_NAME"
-tmux new-session -s "$SESSION_NAME" "bash -c '. .venv/bin/activate && ./run_rl_swarm.sh'"
+tmux new-session -d -s "$SESSION_NAME" \
+  "bash -c '. .venv/bin/activate && ./run_rl_swarm.sh 2>&1 | tee -a \"$LOG_FILE\"; echo -e \"\n🛑 Script finished. Staying in tmux shell...\"; exec bash'"
+
+sleep 1
+echo "🔄 Attaching to tmux session..."
+tmux attach -t "$SESSION_NAME"
